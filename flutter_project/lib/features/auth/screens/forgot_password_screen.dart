@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/constants/app_colors.dart';
-import '../../../core/widgets/animated_background.dart';
-import '../../../core/widgets/tilt_3d_card.dart';
 import '../../../core/services/appwrite_service.dart';
+import '../widgets/auth_action_button.dart';
+import '../widgets/auth_layout.dart';
+import '../widgets/auth_text_field.dart';
+import '../widgets/auth_theme_tokens.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -12,10 +15,13 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  bool _isLoading = false;
-
   final _appwriteService = AppwriteService();
+
+  bool _isLoading = false;
+  String? _statusMessage;
+  bool _statusError = false;
 
   @override
   void dispose() {
@@ -24,87 +30,105 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Future<void> _handleReset() async {
-    final email = _emailController.text.trim();
-    if (!email.contains('@')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid email address')),
-      );
-      return;
-    }
+    if (_isLoading) return;
+    if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _statusMessage = null;
+    });
 
     try {
-      await _appwriteService.createPasswordRecovery(email: email);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Password recovery link sent to $email via Appwrite!')),
-        );
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Notice: $e. Recovery instructions sent!')),
-        );
-        Navigator.pop(context);
-      }
+      await _appwriteService.createPasswordRecovery(
+        email: _emailController.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _statusError = false;
+        _statusMessage =
+            'Recovery link sent. Please check your email and follow the Appwrite reset flow.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _statusError = true;
+        _statusMessage = 'Unable to send recovery email. ${error.toString()}';
+      });
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: AnimatedBackground(
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Tilt3DCard(
-                borderRadius: BorderRadius.circular(24),
-                padding: const EdgeInsets.all(24.0),
+    final reducedMotion = AuthThemeTokens.reducedMotion(context);
+
+    return AuthScreenShell(
+      showBack: true,
+      child: Column(
+        children: [
+          const AuthBrandHeader(subtitle: 'Secure account recovery'),
+          const SizedBox(height: 20),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration:
+                reducedMotion ? Duration.zero : const Duration(milliseconds: 440),
+            curve: Curves.easeOutCubic,
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: Transform.translate(
+                  offset: Offset(0, 14 * (1 - value)),
+                  child: child,
+                ),
+              );
+            },
+            child: AuthGlassPanel(
+              child: Form(
+                key: _formKey,
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.lock_reset, size: 50, color: AppColors.neonCyan),
-                    const SizedBox(height: 12),
-                    const Text('Recover Password', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                    Text('Forgot password?', style: AuthThemeTokens.displayTitle),
                     const SizedBox(height: 6),
-                    const Text('Enter your registered email to receive recovery instructions.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                    const SizedBox(height: 20),
-
-                    TextField(
-                      controller: _emailController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: AppColors.backgroundNavy,
-                        hintText: 'Email Address',
-                        prefixIcon: const Icon(Icons.email_outlined, color: AppColors.neonCyan),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
+                    Text(
+                      'Enter your account email and we will send your Appwrite password recovery link.',
+                      style: AuthThemeTokens.body,
                     ),
-                    const SizedBox(height: 20),
-
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.neonCyan,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        onPressed: _isLoading ? null : _handleReset,
-                        child: const Text('Send Recovery Link', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    const SizedBox(height: 16),
+                    AuthTextField(
+                      controller: _emailController,
+                      label: 'Email address',
+                      hint: 'you@example.com',
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.done,
+                      prefix: const Icon(Icons.mark_email_read_outlined,
+                          color: AppColors.neonCyan),
+                      validator: (value) {
+                        final text = value?.trim() ?? '';
+                        if (text.isEmpty) return 'Email is required';
+                        final isEmail = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                            .hasMatch(text);
+                        return isEmail ? null : 'Enter a valid email address';
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    AuthActionButton(
+                      label: 'Send recovery link',
+                      isLoading: _isLoading,
+                      onPressed: _handleReset,
+                    ),
+                    AuthMessageBanner(
+                      message: _statusMessage,
+                      isError: _statusError,
+                    ),
+                    const SizedBox(height: 10),
+                    Center(
+                      child: TextButton(
+                        onPressed: _isLoading ? null : () => Navigator.pop(context),
+                        child: const Text('Return to sign in'),
                       ),
                     ),
                   ],
@@ -112,7 +136,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
