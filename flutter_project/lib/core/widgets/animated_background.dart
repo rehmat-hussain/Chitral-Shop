@@ -1,5 +1,7 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
+
 import '../constants/app_colors.dart';
 
 class AnimatedBackground extends StatefulWidget {
@@ -18,15 +20,32 @@ class AnimatedBackground extends StatefulWidget {
 
 class _AnimatedBackgroundState extends State<AnimatedBackground>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+  late final AnimationController _controller;
+
+  bool get _reducedMotion {
+    final mediaQuery = MediaQuery.maybeOf(context);
+    return (mediaQuery?.disableAnimations ?? false) ||
+        (mediaQuery?.accessibleNavigation ?? false);
+  }
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 16),
-    )..repeat();
+      duration: const Duration(seconds: 24),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_reducedMotion) {
+      _controller.value = 0.45;
+      _controller.stop();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    }
   }
 
   @override
@@ -38,12 +57,22 @@ class _AnimatedBackgroundState extends State<AnimatedBackground>
   @override
   Widget build(BuildContext context) {
     return Stack(
+      fit: StackFit.expand,
       children: [
-        // Base dark navy canvas
         Container(
-          color: AppColors.backgroundDeep,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF040713),
+                Color(0xFF070B19),
+                Color(0xFF0A1025),
+                Color(0xFF070918),
+              ],
+            ),
+          ),
         ),
-        // Animated glowing orbs and particles
         AnimatedBuilder(
           animation: _controller,
           builder: (context, child) {
@@ -51,12 +80,27 @@ class _AnimatedBackgroundState extends State<AnimatedBackground>
               painter: _ParticleOrbPainter(
                 progress: _controller.value,
                 showParticles: widget.showParticles,
+                reducedMotion: _reducedMotion,
               ),
-              size: Size.infinite,
             );
           },
         ),
-        // Content on top
+        const IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0x2200F0FF),
+                  Colors.transparent,
+                  Color(0x1A9F6BFF),
+                ],
+                stops: [0.0, 0.5, 1.0],
+              ),
+            ),
+          ),
+        ),
         widget.child,
       ],
     );
@@ -66,66 +110,99 @@ class _AnimatedBackgroundState extends State<AnimatedBackground>
 class _ParticleOrbPainter extends CustomPainter {
   final double progress;
   final bool showParticles;
+  final bool reducedMotion;
 
-  _ParticleOrbPainter({
+  const _ParticleOrbPainter({
     required this.progress,
     required this.showParticles,
+    required this.reducedMotion,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final double angle = progress * 2 * pi;
+    final shimmer = reducedMotion ? 0.0 : sin(progress * 2 * pi);
 
-    // Glowing Orb 1: Cyan / Blue (Top Left moving towards center)
-    final orb1Center = Offset(
-      size.width * 0.25 + sin(angle) * (size.width * 0.15),
-      size.height * 0.2 + cos(angle) * (size.height * 0.1),
+    final cyanCenter = Offset(
+      size.width * 0.2 + shimmer * size.width * 0.08,
+      size.height * 0.16 + shimmer * size.height * 0.03,
     );
-    final orb1Paint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          AppColors.neonCyan.withOpacity(0.22),
-          AppColors.neonBlue.withOpacity(0.10),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.5, 1.0],
-      ).createShader(Rect.fromCircle(center: orb1Center, radius: size.width * 0.45));
-    canvas.drawCircle(orb1Center, size.width * 0.45, orb1Paint);
-
-    // Glowing Orb 2: Violet / Purple (Bottom Right moving)
-    final orb2Center = Offset(
-      size.width * 0.8 - cos(angle * 0.8) * (size.width * 0.15),
-      size.height * 0.7 - sin(angle * 0.8) * (size.height * 0.12),
+    final violetCenter = Offset(
+      size.width * 0.82 - shimmer * size.width * 0.08,
+      size.height * 0.72 - shimmer * size.height * 0.04,
     );
-    final orb2Paint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          AppColors.neonViolet.withOpacity(0.20),
-          AppColors.neonPurple.withOpacity(0.08),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.5, 1.0],
-      ).createShader(Rect.fromCircle(center: orb2Center, radius: size.width * 0.5));
-    canvas.drawCircle(orb2Center, size.width * 0.5, orb2Paint);
+    final magentaCenter = Offset(
+      size.width * 0.55 + shimmer * size.width * 0.05,
+      size.height * 0.42,
+    );
 
-    if (showParticles) {
-      // 18 Floating micro-stars / light particles
-      final particlePaint = Paint()..style = PaintingStyle.fill;
-      for (int i = 0; i < 18; i++) {
-        final double speed = 0.5 + (i % 5) * 0.2;
-        final double pOffset = (progress * speed + (i * 0.055)) % 1.0;
-        final double px = (sin(i * 1.7) * 0.5 + 0.5) * size.width;
-        final double py = (1.0 - pOffset) * size.height;
-        final double pSize = 1.2 + (i % 3) * 0.9;
-        final double opacity = sin(pOffset * pi) * 0.6;
+    canvas.drawCircle(
+      cyanCenter,
+      size.width * 0.5,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            AppColors.neonCyan.withOpacity(0.26),
+            AppColors.neonBlue.withOpacity(0.1),
+            Colors.transparent,
+          ],
+        ).createShader(
+          Rect.fromCircle(center: cyanCenter, radius: size.width * 0.5),
+        ),
+    );
 
-        particlePaint.color = (i % 2 == 0 ? AppColors.neonCyan : AppColors.neonViolet)
-            .withOpacity(opacity.clamp(0.0, 1.0));
-        canvas.drawCircle(Offset(px, py), pSize, particlePaint);
-      }
+    canvas.drawCircle(
+      violetCenter,
+      size.width * 0.6,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            AppColors.neonViolet.withOpacity(0.26),
+            AppColors.neonPurple.withOpacity(0.1),
+            Colors.transparent,
+          ],
+        ).createShader(
+          Rect.fromCircle(center: violetCenter, radius: size.width * 0.6),
+        ),
+    );
+
+    canvas.drawCircle(
+      magentaCenter,
+      size.width * 0.35,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0x33E879F9),
+            const Color(0x119F6BFF),
+            Colors.transparent,
+          ],
+        ).createShader(
+          Rect.fromCircle(center: magentaCenter, radius: size.width * 0.35),
+        ),
+    );
+
+    if (!showParticles) {
+      return;
+    }
+
+    final particlePaint = Paint()..style = PaintingStyle.fill;
+    for (int i = 0; i < 20; i++) {
+      final speed = 0.3 + ((i % 4) * 0.16);
+      final anim = reducedMotion
+          ? (i / 20)
+          : (progress * speed + (i * 0.08)) % 1.0;
+      final px = (sin(i * 1.7 + anim * pi) * 0.45 + 0.5) * size.width;
+      final py = (1 - anim) * size.height;
+      final opacity = reducedMotion ? 0.15 : sin(anim * pi).clamp(0.0, 1.0) * 0.32;
+      particlePaint.color =
+          (i.isEven ? AppColors.neonCyan : AppColors.neonViolet).withOpacity(opacity);
+      canvas.drawCircle(Offset(px, py), 1 + (i % 3) * 0.8, particlePaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _ParticleOrbPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _ParticleOrbPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.showParticles != showParticles ||
+        oldDelegate.reducedMotion != reducedMotion;
+  }
 }

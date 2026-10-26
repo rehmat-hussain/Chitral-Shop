@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/constants/app_colors.dart';
-import '../../../core/widgets/animated_background.dart';
-import '../../../core/widgets/tilt_3d_card.dart';
 import '../../../core/services/appwrite_service.dart';
-import 'signup_screen.dart';
-import 'forgot_password_screen.dart';
 import '../../marketplace/screens/home_screen.dart';
+import '../widgets/auth_action_button.dart';
+import '../widgets/auth_layout.dart';
+import '../widgets/auth_text_field.dart';
+import '../widgets/auth_theme_tokens.dart';
+import 'forgot_password_screen.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,10 +18,14 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
+  String? _statusMessage;
+  bool _statusError = false;
 
   final _appwriteService = AppwriteService();
 
@@ -30,199 +37,222 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
+    if (_isLoading || _isGoogleLoading) return;
+    if (!_formKey.currentState!.validate()) return;
 
-    if (!email.contains('@') || !email.contains('.')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid email address')),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _statusMessage = null;
+    });
 
     try {
-      await _appwriteService.login(email: email, password: password);
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const MarketplaceHomeScreen()),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login status: $e')),
-        );
-        // Fallback for seamless testing
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const MarketplaceHomeScreen()),
-        );
-      }
+      await _appwriteService.login(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MarketplaceHomeScreen()),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _statusError = true;
+        _statusMessage = 'Sign in failed. ${error.toString()}';
+      });
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    if (_isLoading || _isGoogleLoading) return;
+    setState(() {
+      _isGoogleLoading = true;
+      _statusMessage = null;
+    });
+    try {
+      await _appwriteService.createOAuth2Session(provider: 'google');
+      if (!mounted) return;
+      setState(() {
+        _statusError = false;
+        _statusMessage = 'Continue Google sign-in in the opened browser window.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _statusError = true;
+        _statusMessage = 'Google sign-in failed. ${error.toString()}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isGoogleLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: AnimatedBackground(
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
-              child: Tilt3DCard(
-                borderRadius: BorderRadius.circular(24),
-                padding: const EdgeInsets.all(24.0),
+    final reducedMotion = AuthThemeTokens.reducedMotion(context);
+
+    return AuthScreenShell(
+      child: Column(
+        children: [
+          const AuthBrandHeader(
+            subtitle: 'Immersive mountain marketplace experience',
+          ),
+          const SizedBox(height: 22),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration:
+                reducedMotion ? Duration.zero : const Duration(milliseconds: 460),
+            curve: Curves.easeOutCubic,
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: Transform.translate(
+                  offset: Offset(0, 16 * (1 - value)),
+                  child: child,
+                ),
+              );
+            },
+            child: AuthGlassPanel(
+              child: Form(
+                key: _formKey,
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 68,
-                      height: 68,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: AppColors.primaryGradient,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.neonCyan.withOpacity(0.5),
-                            blurRadius: 16,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(Icons.shopping_bag_rounded, color: Colors.white, size: 36),
+                    Text('Welcome back', style: AuthThemeTokens.displayTitle),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Sign in with your email and password to continue shopping.',
+                      style: AuthThemeTokens.body,
                     ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'Chitral Shop',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                    const Text(
-                      'By Rahmat • Multi-Vendor Marketplace',
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Email Field
-                    TextField(
+                    const SizedBox(height: 18),
+                    AuthTextField(
                       controller: _emailController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: AppColors.backgroundNavy,
-                        hintText: 'Enter Email Address',
-                        hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
-                        prefixIcon: const Icon(Icons.email_outlined, color: AppColors.neonCyan),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
+                      label: 'Email address',
+                      hint: 'you@example.com',
+                      keyboardType: TextInputType.emailAddress,
+                      prefix: const Icon(Icons.alternate_email_rounded,
+                          color: AppColors.neonCyan),
+                      validator: (value) {
+                        final text = value?.trim() ?? '';
+                        if (text.isEmpty) return 'Email is required';
+                        final isEmail = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                            .hasMatch(text);
+                        return isEmail ? null : 'Enter a valid email address';
+                      },
                     ),
-                    const SizedBox(height: 14),
-
-                    // Password Field
-                    TextField(
+                    const SizedBox(height: 12),
+                    AuthTextField(
                       controller: _passwordController,
+                      label: 'Password',
+                      hint: 'Enter your password',
                       obscureText: _obscurePassword,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: AppColors.backgroundNavy,
-                        hintText: 'Enter Password',
-                        hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
-                        prefixIcon: const Icon(Icons.lock_outline, color: AppColors.neonCyan),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      textInputAction: TextInputAction.done,
+                      prefix:
+                          const Icon(Icons.lock_outline_rounded, color: AppColors.neonCyan),
+                      suffix: IconButton(
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
+                        icon: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          transitionBuilder: (child, animation) {
+                            return RotationTransition(
+                              turns: Tween(begin: 0.9, end: 1).animate(animation),
+                              child: FadeTransition(opacity: animation, child: child),
+                            );
+                          },
+                          child: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off_rounded
+                                : Icons.visibility_rounded,
+                            key: ValueKey<bool>(_obscurePassword),
                             color: AppColors.textSecondary,
                           ),
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                         ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
+                      validator: (value) {
+                        final text = value ?? '';
+                        if (text.isEmpty) return 'Password is required';
+                        if (text.length < 8) {
+                          return 'Password must be at least 8 characters';
+                        }
+                        return null;
+                      },
                     ),
-
+                    const SizedBox(height: 4),
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()));
-                        },
-                        child: const Text('Forgot Password?', style: TextStyle(color: AppColors.neonCyan, fontSize: 12)),
+                        onPressed: _isLoading || _isGoogleLoading
+                            ? null
+                            : () => Navigator.push(
+                                  context,
+                                  authPageRoute(const ForgotPasswordScreen()),
+                                ),
+                        child: const Text('Forgot password?'),
                       ),
                     ),
-                    const SizedBox(height: 8),
-
-                    // Login Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.neonCyan,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        onPressed: _isLoading ? null : _handleLogin,
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                              )
-                            : const Text('Login to Account', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      ),
+                    AuthActionButton(
+                      label: 'Sign In',
+                      isLoading: _isLoading,
+                      onPressed: _handleLogin,
                     ),
-                    const SizedBox(height: 18),
-
-                    // Google Login Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.white.withOpacity(0.15)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        icon: const Icon(Icons.g_mobiledata, color: Colors.white, size: 28),
-                        label: const Text('Continue with Google', style: TextStyle(color: Colors.white)),
-                        onPressed: () async {
-                          await _appwriteService.createOAuth2Session(provider: 'google');
-                          if (mounted) {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (_) => const MarketplaceHomeScreen()),
-                            );
-                          }
-                        },
-                      ),
+                    const SizedBox(height: 10),
+                    AuthActionButton(
+                      label: 'Continue with Google',
+                      icon: Icons.g_mobiledata_rounded,
+                      variant: AuthButtonVariant.secondary,
+                      isLoading: _isGoogleLoading,
+                      onPressed: _handleGoogleSignIn,
                     ),
-                    const SizedBox(height: 16),
-
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    AuthMessageBanner(
+                      message: _statusMessage,
+                      isError: _statusError,
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 4,
                       children: [
-                        const Text("Don't have an account? ", style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        Text('New to Chitral Shop?', style: AuthThemeTokens.body),
                         GestureDetector(
-                          onTap: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => const SignupScreen()));
-                          },
-                          child: const Text('Sign Up', style: TextStyle(color: AppColors.neonCyan, fontWeight: FontWeight.bold, fontSize: 12)),
+                          onTap: _isLoading || _isGoogleLoading
+                              ? null
+                              : () => Navigator.push(
+                                    context,
+                                    authPageRoute(const SignupScreen()),
+                                  ),
+                          child: Text(
+                            'Create Account',
+                            style: AuthThemeTokens.body.copyWith(
+                              color: AppColors.neonCyan,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: Text(
+                        'By continuing, you agree to Terms & Privacy.',
+                        textAlign: TextAlign.center,
+                        style: AuthThemeTokens.body.copyWith(fontSize: 11),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

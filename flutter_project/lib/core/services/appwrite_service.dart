@@ -62,7 +62,15 @@ class AppwriteService {
   }
 
   Future<void> createOAuth2Session({required String provider}) async {
-    await account.createOAuth2Session(provider: OAuthProvider.google);
+    final oauthProvider = switch (provider.toLowerCase()) {
+      'google' => OAuthProvider.google,
+      _ => throw UnsupportedError('Unsupported OAuth provider: $provider'),
+    };
+    await account.createOAuth2Session(provider: oauthProvider);
+  }
+
+  Future<void> createEmailVerification() async {
+    await account.createVerification(url: 'https://chitralshop.pk/verify-email');
   }
 
   Future<models.User?> getCurrentUser() async {
@@ -85,7 +93,9 @@ class AppwriteService {
   }
 
   // Realtime subscription for trending metrics and product stock
-  RealtimeSubscription subscribeToTrendingMetrics(Function(RealtimeMessage) onUpdate) {
+  RealtimeSubscription subscribeToTrendingMetrics(
+    Function(RealtimeMessage) onUpdate,
+  ) {
     final subscription = realtime.subscribe([
       'databases.$databaseId.collections.$trendingMetricsCollection.documents',
       'databases.$databaseId.collections.$productsCollection.documents',
