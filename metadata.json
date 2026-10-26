@@ -1,0 +1,8 @@
+{
+  "name": "Chitral Shop",
+  "description": "Chitral Shop — Futuristic 3D Multi-Vendor Marketplace By Rahmat. Featuring authentic Chitrali handicrafts, traditional Patti wool, Pakols, dry fruits, gemstones, and dynamic trending products.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
